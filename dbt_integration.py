@@ -75,13 +75,16 @@ def to_dict(obj):
     if isinstance(obj, (datetime, date, time)):
         return obj.isoformat()
     elif isinstance(obj, dict):
-        return dict((key, to_dict(val)) for key, val in obj.items())
+        return {key: to_dict(val) for key, val in obj.items()}
     elif isinstance(obj, Iterable):
         return [to_dict(val) for val in obj]
     elif hasattr(obj, '__dict__'):
         return to_dict(vars(obj))
     elif hasattr(obj, '__slots__'):
-        return to_dict(dict((name, getattr(obj, name)) for name in getattr(obj, '__slots__')))
+        return to_dict(
+            {name: getattr(obj, name) for name in getattr(obj, '__slots__')}
+        )
+
     return obj
 
 
@@ -94,25 +97,24 @@ def memoize_get_rendered(function):
     """Custom memoization function for dbt-core jinja interface"""
 
     def wrapper(
-        string: str,
-        ctx: Dict[str, Any],
-        node: ManifestNode = None,
-        capture_macros: bool = False,
-        native: bool = False,
-    ):
+            string: str,
+            ctx: Dict[str, Any],
+            node: ManifestNode = None,
+            capture_macros: bool = False,
+            native: bool = False,
+        ):
         v = md5(string.strip().encode("utf-8")).hexdigest()
-        v += "__" + str(CACHE_VERSION)
-        if capture_macros == True and node is not None:
+        v += f"__{str(CACHE_VERSION)}"
+        if capture_macros and node is not None:
             if node.is_ephemeral:
                 return function(string, ctx, node, capture_macros, native)
-            v += "__" + node.unique_id
+            v += f"__{node.unique_id}"
         rv = CACHE.get(v)
         if rv is not None:
             return rv
-        else:
-            rv = function(string, ctx, node, capture_macros, native)
-            CACHE[v] = rv
-            return rv
+        rv = function(string, ctx, node, capture_macros, native)
+        CACHE[v] = rv
+        return rv
 
     return wrapper
 
@@ -426,7 +428,7 @@ class DbtProject:
     def compile_sql(self, raw_sql: str) -> DbtAdapterCompilationResult:
         """Creates a node with a `dbt.parser.sql` class. Compile generated node."""
         try:
-            temp_node_id = str("t_" + uuid.uuid4().hex)
+            temp_node_id = str(f"t_{uuid.uuid4().hex}")
             node = self.compile_node(self.get_server_node(raw_sql, temp_node_id))
             self._clear_node(temp_node_id)
             return node
